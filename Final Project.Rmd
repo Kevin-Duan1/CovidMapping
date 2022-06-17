@@ -1,0 +1,275 @@
+---
+title: "Final Project: Effect of full vaccination rate and non vaccinaion rate in US"
+author: "Kevin Duan"
+date: "4/21/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(ggplot2)
+library(ggmap)
+library(plotly)
+library(readxl)
+```
+
+1. An introduction to the research question you are seeking to answer or explore
+
+2. One or more displays that helps the audience understand the data you are working with
+
+3. One or more displays from the initial exploratory phase of your data analysis
+
+4. One or more displays that include your model/analysis of the data
+These may include diagnostic plots, informal comparisons, tests for assumptions, etc.
+
+5.One or more displays that supports the conclusion/answer to your research question
+
+```{r data}
+#load in the relevant data
+#taken from https://www.kaggle.com/datasets/paultimothymooney/usa-covid19-vaccinations
+vacc <- read.csv("D:/School Work/Data Visualization/us_state_vaccinations.csv")
+
+#taken from https://healthdata.gov/dataset/United-States-COVID-19-Cases-and-Deaths-by-State-o/hiyb-zgc2
+covcases <- read.csv("D:/School Work/Data Visualization/US _cases by State_Time.csv")
+colnames(covcases)[which(names(covcases) == "state")]<- "abb"
+
+states <- data.frame(state = state.name, abb = state.abb)
+
+#taken from https://data.census.gov/cedsci/table?tid=PEPPOP2021.NST_EST2021_POP
+usapop <- read_excel("D:/NST-EST2021-POP.xlsx", sheet = 2)
+usapop$State <- substring(usapop$State, 2)
+
+#change the chr to date format
+vacc$date <- as.Date(vacc$date)
+covcases$submission_date <- as.Date(covcases$submission_date, format = "%m/%d/%Y")
+
+
+#ne <- tolower(as.list(strsplit(c("Maine, Massachusetts, Rhode Island, Connecticut, New Hampshire, Vermont, New York, Pennsylvania, New Jersey, Delaware, Maryland"), ", ")[[1]]))
+
+#se <- tolower(as.list(strsplit(c("West Virginia, Virginia, Kentucky, Tennessee, North Carolina, South Carolina, Georgia, Alabama, Mississippi, Arkansas, Louisiana, Florida"), ",")[[1]]))
+
+```
+
+```{r EDA}
+summary(covcases)
+summary(vacc)
+summary(usapop)
+
+#cleaning
+(covcasesa <- left_join(covcases, states, by = "abb") %>%
+  select(submission_date,abb,state,new_case, tot_cases,tot_death,new_death)%>%
+  rename(date = submission_date, State = state)%>%
+  filter(date > "2021-01-11" & date < "2022-04-21" & ! abb %in% c("PW", "FSM", "GU", "MP", "VI", "PR", "AS", "NYC","RMI", "DC"))%>% 
+  group_by(date)%>%arrange(State,date))
+
+covcasesb <- left_join(covcasesa, usapop, by = "State") %>% 
+  select(-'2020_pop')%>%
+  mutate(NewCaseProp = new_case / `2021_pop`,TotCaseProp = tot_cases / `2021_pop`)
+
+covcasesb%>%
+  select(abb, TotCaseProp)%>%
+  ggplot() + geom_boxplot(mapping = aes(x=abb, y=TotCaseProp))+
+  coord_flip()+
+  labs(title = ("Distribution of COVID-19 cases for each State"),subtitle = "Covid cases from Jan 21, 2020 - April 21, 2022", x= "State", y = "Cases", caption = "Data acquired from https://healthdata.gov/dataset/United-States-COVID-19-Cases-and-Deaths-by-State-o/hiyb-zgc2")+
+  theme(
+    plot.caption = element_text(hjust = 0, face = "italic"),
+    plot.title.position =  "plot",
+    plot.caption.position = "plot",
+    panel.grid.major = element_line(color = "grey90"),
+    panel.background = element_rect(fill = NA),
+    axis.ticks.y = element_line(size = 0.5),
+    axis.text.y= element_text(hjust = 1, vjust= 0.15)
+  )
+```
+
+```{r EDA plots}
+covcasesb %>% select(abb, State)%>%
+  ggplot() + geom_boxplot(mapping = aes(x=abb, y=tot_cases))+
+  coord_flip()+
+  labs(title = ("Distribution of COVID-19 cases for each State"),subtitle = "Covid cases from Jan 21, 2020 - April 21, 2022", x= "State", y = "Cases", caption = "Data acquired from https://healthdata.gov/dataset/United-States-COVID-19-Cases-and-Deaths-by-State-o/hiyb-zgc2")+
+  theme(
+    plot.caption = element_text(hjust = 0, face = "italic"),
+    plot.title.position =  "plot",
+    plot.caption.position = "plot",
+    panel.grid.major = element_line(color = "grey90"),
+    panel.background = element_rect(fill = NA),
+    axis.ticks.y = element_line(size = 0.5),
+    axis.text.y= element_text(hjust = 1, vjust= 0.15)
+  )
+
+covcasesb %>% select(date, abb, NewCaseProp)%>%
+  filter(!abb %in% c("PW", "FSM", "GU", "MP", "VI", "PR", "AS", "NYC","RMI", "DC"))%>%
+  ggplot() + geom_line(aes(x = date, y = NewCaseProp, color = abb))+
+  labs(title = ("New cases of Covid in all States"),subtitle = "Cases from Jan 21, 2020 - April 21, 2022", x= "Date", y = "Cases", caption = "Data acquired from https://healthdata.gov/dataset/United-States-COVID-19-Cases-and-Deaths-by-State-o/hiyb-zgc2")+
+  scale_fill_discrete(name = "States")+
+  theme(
+    plot.caption = element_text(hjust = 0, face = "italic"),
+    plot.title.position =  "plot",
+    plot.caption.position = "plot",
+    panel.grid.major = element_line(color = "grey90"),
+    panel.background = element_rect(fill = NA),
+    axis.ticks.y = element_line(size = 0.5),
+    axis.text.y= element_text(hjust = 1, vjust= 0.15)
+  )
+
+
+#EDA
+covcases %>% select(submission_date, abb, new_case)%>%
+  filter(abb == "FL") %>%
+  ggplot() +geom_line(aes(x=submission_date, y = new_case))+
+  labs(title = "New cases of Covid in Florida", subtitle = "Covid cases from Jan 21, 2020 - April 21, 2022", caption = "Data acquired from https://healthdata.gov/dataset/United-States-COVID-19-Cases-and-Deaths-by-State-o/hiyb-zgc2", x = "Date", y = "New Cases")+
+  theme(
+    plot.caption = element_text(hjust = 0, face = "italic"),
+    plot.title.position =  "plot",
+    plot.caption.position = "plot",
+    panel.grid.major = element_line(color = "grey90"),
+    panel.background = element_rect(fill = NA),
+  )
+
+vacc %>% select(date, location, daily_vaccinations, people_fully_vaccinated)%>%filter(location == "Florida") %>%
+  ggplot() +geom_line(aes(x=date, y = daily_vaccinations))+
+  labs(title = "Daily number of people vaccinated in Florida", subtitle = "Vaccinations given from Jan 12, 2021 - April 21, 2022", caption = "Data acquired from https://www.kaggle.com/datasets/paultimothymooney/usa-covid19-vaccinations", y = "Daily Vaccinations", x = "Date")+
+  theme(
+    plot.caption = element_text(hjust = 0, face = "italic"),
+    plot.title.position =  "plot",
+    plot.caption.position = "plot",
+    panel.grid.major = element_line(color = "grey90"),
+    panel.background = element_rect(fill = NA),
+  )
+
+  
+```
+
+```{r cleaning} 
+#subset the data to when vaccines were implemented
+(covcasesa <- left_join(covcases, states, by = "abb") %>%
+  select(submission_date,abb,state,new_case,tot_cases)%>%
+  rename(date = submission_date)%>%
+  filter(date > "2021-01-11" & date < "2022-04-21" & ! abb %in% c("PW", "FSM", "GU", "MP", "VI", "PR", "AS", "NYC","RMI", "DC"))%>% 
+  group_by(date)%>%arrange(state,date))
+
+
+#match the two datasets before merging them
+colnames(vacc)[which(names(vacc)== 'location')]<- "state"
+vacc$state <- ifelse(vacc$state == "New York State", "New York", vacc$state)
+
+vacc <- vacc %>% 
+  select(date, state, daily_vaccinations, people_fully_vaccinated, total_vaccinations) %>%
+  mutate(partially_vaccinated = total_vaccinations - people_fully_vaccinated)
+
+#join the two data sets by date and state
+full <- left_join(covcasesa,vacc, by=c("date","state"))%>%
+#filter out the relevant data will be used for the analysis
+  select(date, state, abb, new_case, daily_vaccinations, people_fully_vaccinated, partially_vaccinated,total_vaccinations, tot_cases)
+
+summary(full)
+#replace negative case values with 0, 
+(filter(full, new_case < 0 ))
+(filter(full, state == "California" & date >"2021-06-28" & date < "2021-07-3"))
+(filter(full, is.na(daily_vaccinations)& new_case))
+a <-(mutate(full, new_case = , daily_vaccinations = ifelse(is.na(daily_vaccinations),0,daily_vaccinations))) %>%
+  filter(!new_case<=0)
+#b <- filter(full, !is.na(partially_vaccinated))
+
+a$abb <- factor(a$abb)
+#b$abb <- factor(b$abb)
+```
+
+```{r model}
+#lagdf <- embed(log(a$new_case),52)
+# colnames(lagdf) <- c("y", paste0("biweek", 1:51))
+# lagdf <- data.frame(lagdf)
+# armod <- lm(y~.-biweek51, lagdf)
+# plot(new_case~date, full, type = "l")
+# lines(full$new_case[2206:232], exp(predict(armod)), lty=2)
+
+lmod <- lm(log(new_case) ~ daily_vaccinations*abb + date, data = a)
+summary(lmod)
+
+
+a%>% add_residuals(lmod)
+
+grid <- a %>%
+  data_grid(daily_vaccinations,abb)
+grid <- grid %>%
+  add_predictions(lmod)
+grid
+ggplot(a)+
+  geom_point(aes(x= daily_vaccinations, y = new_case)) +
+  geom_line(aes(x = daily_vaccinations, y = pred), data = grid, colour = "red", size = 1)
+```
+
+```{r diagnostic plots}
+ggplot()+
+  geom_point(aes(y= residuals(lmod),x=fitted(lmod))) +
+  geom_hline(yintercept = 0, color = "red", size = 1)+
+  labs(title = "Residuals vs. Fitted Plot", y = "Residuals", x = "Fitted")+
+  theme(
+    plot.caption = element_text(hjust = 0, face = "italic"),
+    plot.title.position =  "plot",
+    plot.caption.position = "plot",
+    panel.grid.major = element_line(color = "grey90"),
+    panel.background = element_rect(fill = NA),
+  )
+
+qqnorm(residuals(lmod), ylab = "Residuals")
+qqline(residuals(lmod))
+
+```
+
+```{r conclusion}
+a$state <-tolower(a$state)
+stateloc <-  map_data("state")
+colnames(stateloc)[which(names(stateloc) == "region")]<- "state"
+amap<- left_join(a, stateloc,by="state")
+
+(p1<-amap %>% filter(date == "2021-02-12")%>%
+ggplot()+
+  geom_polygon(aes(x = long, y=lat, group =group, fill = new_case)) +
+  scale_fill_viridis(limits = c(0,13000),option = "inferno", name="New Cases"))+ labs(title = "Number of Cases in the US", subtitle = "Observed on February 12, 2021", caption = "Data acquired from https://healthdata.gov/dataset/United-States-COVID-19-Cases-and-Deaths-by-State-o/hiyb-zgc2",)+
+  theme(
+    plot.caption = element_text(hjust = 0, face = "italic"),
+    plot.title.position =  "plot",
+    plot.caption.position = "plot",
+    panel.grid.major = element_blank(),
+    panel.background = element_rect(fill = NA),
+    axis.text = element_blank(),
+    axis.title = element_blank(),
+    axis.ticks = element_blank()
+  )
+
+(p2<-amap %>% filter(date == "2021-02-12")%>%
+ggplot()+
+  geom_polygon(aes(x = long, y=lat, group =group, fill = daily_vaccinations)) +
+    scale_fill_viridis(limits = c(0,220000),option = "viridis", name="Daily Vaccinations"))+ 
+  labs(title = "Daily Vaccinations in the US", subtitle = "Observed on February 12, 2021", caption = "Data acquired from https://www.kaggle.com/datasets/paultimothymooney/usa-covid19-vaccinations")+
+  theme(
+    plot.caption = element_text(hjust = 0, face = "italic"),
+    plot.title.position =  "plot",
+    plot.caption.position = "plot",
+    panel.grid.major = element_blank(),
+    panel.background = element_rect(fill = NA),
+    axis.text = element_blank(),
+    axis.title = element_blank(),
+    axis.ticks = element_blank()
+  )
+
+(p3<-amap %>% filter(date == "2021-02-28")%>%
+ggplot()+
+  geom_polygon(aes(x = long, y=lat, group =group, fill = new_case)) +
+  scale_fill_viridis(limits = c(0,13000),option = "inferno", name="New Cases"))+ 
+  labs(title = "Number of Cases in the US", subtitle = "Observed on February 28, 2021", caption = "Data acquired from https://healthdata.gov/dataset/United-States-COVID-19-Cases-and-Deaths-by-State-o/hiyb-zgc2")+
+  theme(
+    plot.caption = element_text(hjust = 0, face = "italic"),
+    plot.title.position =  "plot",
+    plot.caption.position = "plot",
+    panel.grid.major = element_blank(),
+    panel.background = element_rect(fill = NA),
+    axis.text = element_blank(),
+    axis.title = element_blank(),
+    axis.ticks = element_blank()
+  )
+
+  
+plot_grid(p1, p2, p3,ncol =3) 
+```
