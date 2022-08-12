@@ -10,34 +10,32 @@ library(tidyverse)
 library(ggplot2)
 library(ggmap)
 library(plotly)
-library(readxl)
+library(httr)
 ```
 
-1. An introduction to the research question you are seeking to answer or explore
-
-2. One or more displays that helps the audience understand the data you are working with
-
-3. One or more displays from the initial exploratory phase of your data analysis
-
-4. One or more displays that include your model/analysis of the data
-These may include diagnostic plots, informal comparisons, tests for assumptions, etc.
-
-5.One or more displays that supports the conclusion/answer to your research question
+1. create a heat map of the cases in the US by state
+1a. plot the trends of the cases over the past 2 years
+2. plot the trends of mask usage over the past 2 years
+3. Determine if there is correlation between two trends
+3a. Account for time series factors (weather, other pandemics, etc.)
 
 ```{r data}
 #load in the relevant data
-#taken from https://www.kaggle.com/datasets/paultimothymooney/usa-covid19-vaccinations
-vacc <- read.csv("D:/School Work/Data Visualization/us_state_vaccinations.csv")
+#taken from https://data.cdc.gov/api/views/unsk-b7fc/rows.csv?accessType=DOWNLOAD
+downloadVaccByCounty <- GET("https://data.cdc.gov/api/views/unsk-b7fc/rows.csv?accessType=DOWNLOAD")
+vaccByCounty <- content(downloadVaccByCounty)
+
 
 #taken from https://healthdata.gov/dataset/United-States-COVID-19-Cases-and-Deaths-by-State-o/hiyb-zgc2
-covcases <- read.csv("D:/School Work/Data Visualization/US _cases by State_Time.csv")
+downloadCasesByState <- GET("https://data.cdc.gov/api/views/9mfq-cb36/rows.csv?accessType=DOWNLOAD")
+covcases <- content(downloadCasesByState)
 colnames(covcases)[which(names(covcases) == "state")]<- "abb"
 
 states <- data.frame(state = state.name, abb = state.abb)
 
-#taken from https://data.census.gov/cedsci/table?tid=PEPPOP2021.NST_EST2021_POP
-usapop <- read_excel("D:/NST-EST2021-POP.xlsx", sheet = 2)
-usapop$State <- substring(usapop$State, 2)
+#taken from https://github.com/nytimes/covid-19-data/blob/master/mask-use/mask-use-by-county.csv
+maskFreq <- read.csv("https://github.com/nytimes/covid-19-data/raw/master/mask-use/mask-use-by-county.csv")
+
 
 #change the chr to date format
 vacc$date <- as.Date(vacc$date)
@@ -50,8 +48,42 @@ covcases$submission_date <- as.Date(covcases$submission_date, format = "%m/%d/%Y
 
 ```
 
-```{r EDA}
+# Exploring the Covid Cases Dataset
+### variables of interest
+
+* *submission_date* = date data points were registered
+* *state* abbreviation of the state 
+* *tot_cases* total number of cases reported up to that date
+* *conf_cases* total of lab evidence confirming case
+* *new_case* new confirmed cases of that day
+* *conf_death* deaths claimed from medical certificates
+* *new_death* new confirmed death claims
+NOTE: this dataset is less accurate than departmental data because the CDC reports aggregates when they receive the information. Departments update cases more quickly and may choose to not release their data to the CDC. Also, the reporting is generally less on weekends and holidays. 
+
+```{r EDA_covcases}
 summary(covcases)
+
+
+
+
+
+
+
+
+covcases %>% 
+  #format the date to date time
+  mutate(submission_date = as.Date(submission_date, format = "%m/%d/%y")) %>%
+  #select the columns of interest
+  select(submission_date, state, tot_cases, conf_cases, new_case, tot_death,new_death) %>%
+  #group the data by state and organize by date
+  group_by(state,submission_date) %>%
+  summarize(tot_cases, conf_cases, new_case, tot_death,new_death)
+```
+
+
+
+```{r EDA}
+head(covcases)
 summary(vacc)
 summary(usapop)
 
